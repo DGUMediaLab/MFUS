@@ -1,11 +1,11 @@
 #pragma once
 
+#include "Domains.h"
+
 #include <Stdio.h>
 
 #include <String>
 using namespace std;
-
-typedef unsigned char BYTE;
 
 class BinaryStream
 {
