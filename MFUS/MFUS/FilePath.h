@@ -17,4 +17,5 @@ public:
 	static FilePath* getInstance();
 	const std::string getColorPath(int number);
 	const std::string getDepthPath(int number);
+	const std::string getBodyIndexPath(int number);
 };
