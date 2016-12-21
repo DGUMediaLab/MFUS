@@ -18,3 +18,8 @@ const std::string FilePath::getDepthPath(int number){
 
 	return filepath + dataName + std::string("\\Depth\\") + std::string("Filedepth_") + std::to_string(number) + std::string(".bin");
 }
+
+const std::string FilePath::getBodyIndexPath(int number){
+
+	return filepath + dataName + std::string("\\HR_BodyIndex\\") + std::string("FileHRbodyIndex_") + std::to_string(number) + std::string(".bin");
+}
