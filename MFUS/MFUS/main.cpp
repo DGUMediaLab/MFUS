@@ -22,6 +22,10 @@ void loadBodyIndexFile(BYTE*& bodyIndexData, int frameNumber);
 //3.1
 void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData);
 
+//3.2.1
+double getColorLikelihood();
+double getWeightColorLikelihood();
+
 
 int main(){
 	/**/printf("OpenCV Version : %s\n\n", CV_VERSION);
@@ -83,7 +87,49 @@ int main(){
 	}
 	cv::imshow("Contours", output);
 	*/
-	
+
+
+	//hole의 개수만큼 반복
+	for (int ci = 0; ci < nAreaCount; ci++){
+		/*
+		3.2.1 Region's Color Likelihood and Its Weight
+
+		a^rc = region_color_likelihood
+		w^rc = w_region_color_likelihood
+
+		a^cb = color_likelihood
+		w^cb = w_color_likelihood
+		w.^cb = norm_w_color_likelihood
+		*/		
+
+		double sum_w_color_likelihood = 0;
+		for (int pi = 0; pi < contours[ci].size(); pi++){
+			
+			double w_color_likelihood = getWeightColorLikelihood();
+			//equation (4)
+			sum_w_color_likelihood += w_color_likelihood;
+
+		}
+
+		double region_color_likelihood = 0;
+		double w_region_color_likelihood = 0;
+
+		for (int pi = 0; pi < contours[ci].size(); pi++){
+			
+			double color_likelihood = getColorLikelihood();
+			double w_color_likelihood = getWeightColorLikelihood();
+
+			//equation (4)
+			double norm_w_color_likelihood = w_color_likelihood / sum_w_color_likelihood;		
+			region_color_likelihood += norm_w_color_likelihood * color_likelihood;
+
+			//equation (5)
+			w_region_color_likelihood += w_color_likelihood;
+		}
+		//equation (5)
+		w_region_color_likelihood / contours[ci].size();
+	}
+
 	//이후 단계 구현
 
 
@@ -158,4 +204,13 @@ void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData)
 				initial_segmentation[row * COLOR_WIDTH + (col / 2)] = 0;	//background		
 		}
 	}
+}
+
+double getColorLikelihood(){
+	return 0;
+}
+
+double getWeightColorLikelihood()
+{
+	return 0;
 }
