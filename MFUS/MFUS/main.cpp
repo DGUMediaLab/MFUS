@@ -11,31 +11,46 @@
 #include "BinaryStream.h"
 
 
+
+
 //Data 읽어오는 메소드들
 void loadDepthImageFile(BYTE*& depthData, int frameNumber);
 void loadBodyIndexFile(BYTE*& bodyIndexData, int frameNumber);
 
+
+//3.1
+void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData);
+
+
 int main(){
 	/**/printf("OpenCV Version : %s\n\n", CV_VERSION);
 
-	BYTE* bodyIndexData;
-	loadBodyIndexFile(bodyIndexData, 20);
+	const int kFrameNumber = 20;
 
-	cv::Mat image(COLOR_HEIGHT, COLOR_WIDTH, CV_8UC1, cv::Scalar(255));
-	
-	for (int row = 0; row < COLOR_HEIGHT; row++){
-		for (int col = 0; col < COLOR_WIDTH * 2; col+=2){
+	/*
+	3.1 Problem Formulation
+	current time t = kFrameNumber
+	I = colorImage
+	D = depthImage
+	x = inital_segmentation	
+	*/		
 
-			if (bodyIndexData[row * COLOR_WIDTH * 2 + col] < 6)
-				image.at<uchar>(row, col / 2) = 0;
-		}
-	}
+	BYTE* bodyIndexData;	
+	loadBodyIndexFile(bodyIndexData, kFrameNumber);
 
-	cv::imshow("Image", image);
+	//initial segmentation method
+	BYTE* initial_segmentation;
+	initialSegmentationMethod(initial_segmentation, bodyIndexData);
 
-	cv::waitKey(0);
-
+	//각 단계 마다 불 필요한 메모리 삭제
 	delete bodyIndexData;
+
+
+	//이후 단계 구현
+
+
+	//마무리 단계
+	delete initial_segmentation;
 
 	return 0;
 }
@@ -90,5 +105,19 @@ void loadBodyIndexFile(BYTE*& bodyIndexData, int frameNumber){
 
 		arr_index++;
 		cur_pos += sizeof(BYTE);
+	}
+}
+
+void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData){
+
+	initial_segmentation = new BYTE[COLOR_HEIGHT * COLOR_WIDTH];
+
+	for (int row = 0; row < COLOR_HEIGHT; row++){
+		for (int col = 0; col < COLOR_WIDTH * 2; col += 2){
+			//영상에 사람이 1명이라고 가정
+			bodyIndexData[row * COLOR_WIDTH * 2 + col] < 6 ?
+				initial_segmentation[row * COLOR_WIDTH + (col / 2)] = 1 :	//foreground
+				initial_segmentation[row * COLOR_WIDTH + (col / 2)] = 0;	//background		
+		}
 	}
 }
