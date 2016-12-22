@@ -21,10 +21,14 @@ void loadBodyIndexFile(BYTE*& bodyIndexData, int frameNumber);
 
 //3.1
 void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData);
+
+
+//3.2
 double getRegionColorLikelihood();
 double getWeightRegionColorLikelihood();
 double getContourSpatialPrior();
 double getWeightContourSpatialPrior();
+
 
 //3.2.1
 double getColorLikelihood();
@@ -44,7 +48,7 @@ int main(){
 	current time t = kFrameNumber
 	x = inital_segmentation	
 	*/		
-
+#pragma region Step : 3.1
 	BYTE* bodyIndexData;	
 	loadBodyIndexFile(bodyIndexData, kFrameNumber);
 
@@ -54,11 +58,13 @@ int main(){
 
 	//각 단계 마다 불 필요한 메모리 삭제
 	delete bodyIndexData;
+#pragma endregion
+
 
 	/*
 	3.2 Foreground Hole Detection
 	*/
-
+#pragma region Step : 3.2
 	//initial Segmentation 영상 만들기, 검정색이 배경
 	cv::Mat img_initial_segmentation(COLOR_HEIGHT, COLOR_WIDTH, CV_8UC1, cv::Scalar(0));
 	for (int row = 0; row < COLOR_HEIGHT; row++){
@@ -69,7 +75,7 @@ int main(){
 			}
 		}
 	}
-	cv::imshow("Initial Segmentation", img_initial_segmentation);
+	//cv::imshow("Initial Segmentation", img_initial_segmentation);
 
 
 	//Initial binary image로부터 모든 contours 구하기
@@ -80,42 +86,32 @@ int main(){
 	//CV_RETR_TREE = contour 검색 결과를 tree 구조로 저장. 이 때 바깥 쪽에 있을 수록 루트
 	cv::findContours(img_initial_segmentation, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE); 
 
+
 	int nAreaCount = contours.size();
 	printf("contour의 개수 = %d\n", nAreaCount);	
 
-	/*
-	a^cs = p_contrast_contour
 
-	w^cs = w_contrast_contour
-
-	w.^rc = control_weight;
-
-	hole's final probability of belonging to the foregorund = p_foreground_hole
-	*/
-	double p_foreground_hole = 0;
-
-
-
-	const double threshold_hole = 0.5;
-
+	const double kThreshold_hole = 0.5;
 	
 	//hole의 개수만큼 반복
 	for (int ci = 0; ci < nAreaCount; ci++){
 		
+		//Step : 3.2.1 : Region's Color Likelihood and Its Weight
 		double a_Region_Color_likelihood = getRegionColorLikelihood();
-		double a_Contour_Spatial_prior = getContourSpatialPrior();
-
 		double w_Region_Color_likelihood = getWeightRegionColorLikelihood();
+
+		//Step : 3.2.2 : Contour's Spatial Prior and Its Weight
+		double a_Contour_Spatial_prior = getContourSpatialPrior();
 		double w_Contour_Spatial_prior = getWeightContourSpatialPrior();
 
 		//equation (2)
 		double w_Dot_R_C = w_Region_Color_likelihood / (w_Region_Color_likelihood + w_Contour_Spatial_prior);
 
 		//equation (2)
-		p_foreground_hole = w_Dot_R_C * a_Region_Color_likelihood + (1 - w_Dot_R_C) * a_Contour_Spatial_prior;
+		double p_foreground_hole = w_Dot_R_C * a_Region_Color_likelihood + (1 - w_Dot_R_C) * a_Contour_Spatial_prior;
 
 		//threshold value(0.5)보다 크면 foreground hole로 인정.
-		//if (p_foreground_hole > threshold_hole){
+		//if (p_foreground_hole > kThreshold_hole){
 		if (1){						
 			//내부를 채우기 위해 음수의 thickness를 입력(API 확인)
 			int thickness = -1;
@@ -131,6 +127,7 @@ int main(){
 	}
 	cv::imshow("Contours", img_initial_segmentation);
 	
+#pragma endregion
 
 	//이후 단계 구현	
 
