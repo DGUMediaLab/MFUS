@@ -21,6 +21,10 @@ void loadBodyIndexFile(BYTE*& bodyIndexData, int frameNumber);
 
 //3.1
 void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData);
+double getRegionColorLikelihood();
+double getWeightRegionColorLikelihood();
+double getContourSpatialPrior();
+double getWeightContourSpatialPrior();
 
 //3.2.1
 double getColorLikelihood();
@@ -29,6 +33,9 @@ double getWeightColorLikelihood();
 
 int main(){
 	/**/printf("OpenCV Version : %s\n\n", CV_VERSION);
+
+	//난수 생성을 위해
+	//srand(time(NULL));
 
 	const int kFrameNumber = 20;
 
@@ -62,7 +69,7 @@ int main(){
 			}
 		}
 	}
-	//cv::imshow("Initial Segmentation", img_initial_segmentation);
+	cv::imshow("Initial Segmentation", img_initial_segmentation);
 
 
 	//Initial binary image로부터 모든 contours 구하기
@@ -74,67 +81,64 @@ int main(){
 	cv::findContours(img_initial_segmentation, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE); 
 
 	int nAreaCount = contours.size();
-	printf("contour의 개수 = %d\n", nAreaCount);
+	printf("contour의 개수 = %d\n", nAreaCount);	
 
-	//contours 영상 만들기	
-	/* 
-	srand(time(NULL));
-	cv::Mat output(COLOR_HEIGHT, COLOR_WIDTH, CV_8UC3, cv::Scalar(0, 0, 0));
-	for (int i = 0; i < nAreaCount; i++){
-		cv::Scalar color = cv::Scalar(rand() % 255, rand() % 255, rand() % 255);
-		int thickness = 2;
-		cv::drawContours(output, contours, i, color, thickness, 8, hierarchy);
-	}
-	cv::imshow("Contours", output);
+	/*
+	a^cs = p_contrast_contour
+
+	w^cs = w_contrast_contour
+
+	w.^rc = control_weight;
+
+	hole's final probability of belonging to the foregorund = p_foreground_hole
 	*/
+	double p_foreground_hole = 0;
 
 
+
+	const double threshold_hole = 0.5;
+
+	
 	//hole의 개수만큼 반복
 	for (int ci = 0; ci < nAreaCount; ci++){
-		/*
-		3.2.1 Region's Color Likelihood and Its Weight
+		
+		double a_Region_Color_likelihood = getRegionColorLikelihood();
+		double a_Contour_Spatial_prior = getContourSpatialPrior();
 
-		a^rc = region_color_likelihood
-		w^rc = w_region_color_likelihood
+		double w_Region_Color_likelihood = getWeightRegionColorLikelihood();
+		double w_Contour_Spatial_prior = getWeightContourSpatialPrior();
 
-		a^cb = color_likelihood
-		w^cb = w_color_likelihood
-		w.^cb = norm_w_color_likelihood
-		*/		
+		//equation (2)
+		double w_Dot_R_C = w_Region_Color_likelihood / (w_Region_Color_likelihood + w_Contour_Spatial_prior);
 
-		double sum_w_color_likelihood = 0;
-		for (int pi = 0; pi < contours[ci].size(); pi++){
-			
-			double w_color_likelihood = getWeightColorLikelihood();
-			//equation (4)
-			sum_w_color_likelihood += w_color_likelihood;
+		//equation (2)
+		p_foreground_hole = w_Dot_R_C * a_Region_Color_likelihood + (1 - w_Dot_R_C) * a_Contour_Spatial_prior;
 
+		//threshold value(0.5)보다 크면 foreground hole로 인정.
+		//if (p_foreground_hole > threshold_hole){
+		if (1){						
+			//내부를 채우기 위해 음수의 thickness를 입력(API 확인)
+			int thickness = -1;
+
+			//색상은 흰색으로
+			cv::Scalar color = cv::Scalar(255);
+			//만약 색상을 통해 눈으로 구분하고 싶으면 아래 주석을 이용 img_initial_segmentation 대신 8UC3 Mat 하나 생성해서 대입하면 됨.
+			//cv::Scalar color = cv::Scalar(rand() % 255, rand() % 255, rand() % 255);
+
+			//hole의 내부를 채운다.
+			cv::drawContours(img_initial_segmentation, contours, ci, color, thickness, 8, hierarchy);
 		}
-
-		double region_color_likelihood = 0;
-		double w_region_color_likelihood = 0;
-
-		for (int pi = 0; pi < contours[ci].size(); pi++){
-			
-			double color_likelihood = getColorLikelihood();
-			double w_color_likelihood = getWeightColorLikelihood();
-
-			//equation (4)
-			double norm_w_color_likelihood = w_color_likelihood / sum_w_color_likelihood;		
-			region_color_likelihood += norm_w_color_likelihood * color_likelihood;
-
-			//equation (5)
-			w_region_color_likelihood += w_color_likelihood;
-		}
-		//equation (5)
-		w_region_color_likelihood / contours[ci].size();
 	}
+	cv::imshow("Contours", img_initial_segmentation);
+	
 
-	//이후 단계 구현
+	//이후 단계 구현	
 
 
 	//마무리 단계
 	delete initial_segmentation;
+
+	cv::waitKey(0);
 
 	return 0;
 }
@@ -204,6 +208,60 @@ void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData)
 				initial_segmentation[row * COLOR_WIDTH + (col / 2)] = 0;	//background		
 		}
 	}
+}
+
+double getRegionColorLikelihood(){
+	/*
+	3.2.1 Region's Color Likelihood and Its Weight
+
+	a^rc = region_color_likelihood
+	w^rc = w_region_color_likelihood
+
+	a^cb = color_likelihood
+	w^cb = w_color_likelihood
+	w.^cb = norm_w_color_likelihood
+	*/
+	/*
+	double sum_w_color_likelihood = 0;
+	for (int pi = 0; pi < contours[ci].size(); pi++){
+
+		double w_color_likelihood = getWeightColorLikelihood();
+		//equation (4)
+		sum_w_color_likelihood += w_color_likelihood;
+
+	}
+
+	double region_color_likelihood = 0;
+	double w_region_color_likelihood = 0;
+
+	for (int pi = 0; pi < contours[ci].size(); pi++){
+
+		double color_likelihood = getColorLikelihood();
+		double w_color_likelihood = getWeightColorLikelihood();
+
+		//equation (4)
+		double norm_w_color_likelihood = w_color_likelihood / sum_w_color_likelihood;
+		region_color_likelihood += norm_w_color_likelihood * color_likelihood;
+
+		//equation (5)
+		w_region_color_likelihood += w_color_likelihood;
+	}
+	//equation (5)
+	w_region_color_likelihood / contours[ci].size();
+	*/
+	return 0;
+}
+
+double getWeightRegionColorLikelihood(){
+	return 0;
+}
+
+double getContourSpatialPrior(){
+	return 0;
+}
+
+double getWeightContourSpatialPrior(){
+	return 0;
 }
 
 double getColorLikelihood(){
