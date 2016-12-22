@@ -26,12 +26,17 @@ void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData)
 //3.2
 double getRegionColorLikelihood(const cv::Mat& contourPixels, int ci, const cv::Mat& img_gray);
 double getWeightRegionColorLikelihood(const cv::Mat& contourPixels);
-double getContourSpatialPrior();
-double getWeightContourSpatialPrior();
+double getContourSpatialPrior(const vector<cv::Point> &contours);
+double getWeightContourSpatialPrior(const vector<cv::Point> &contours);
 
 //3.2.1
 double getColorLikelihood(cv::Point pos, const cv::Mat& img_gray);
 double getWeightColorLikelihood(cv::Point pos);
+
+//3.2.2
+double getSpatialPrior();
+double getWeightSpatialPrior();
+
 
 //전역변수들
 //누적 히스토그램
@@ -153,8 +158,8 @@ int main(){
 			//printf("%f %f\n", a_Region_Color_likelihood, w_Region_Color_likelihood);
 
 			//Step : 3.2.2 : Contour's Spatial Prior and Its Weight
-			double a_Contour_Spatial_prior = getContourSpatialPrior();
-			double w_Contour_Spatial_prior = getWeightContourSpatialPrior();
+			double a_Contour_Spatial_prior = getContourSpatialPrior(contours[ci]);
+			double w_Contour_Spatial_prior = getWeightContourSpatialPrior(contours[ci]);
 
 			//equation (2)
 			double w_Dot_R_C = w_Region_Color_likelihood / (w_Region_Color_likelihood + w_Contour_Spatial_prior);
@@ -367,12 +372,48 @@ double getWeightRegionColorLikelihood(const cv::Mat& contourPixels){
 	return w_region_color_likelihood;
 }
 
-double getContourSpatialPrior(){
-	return 0;
+double getContourSpatialPrior(const vector<cv::Point> &contours){
+	/*
+	3.2.2 Contour's Spatial Prior and Its Weight
+	*/
+
+	//equation (10) (right)
+	double sum_w_spatial_prior = 0;
+	for (int ci = 0; ci < contours.size(); ci++){
+		sum_w_spatial_prior += getWeightSpatialPrior();
+	}
+
+	double a_Contour_Spatial_prior = 0;
+	for (int ci = 0; ci < contours.size(); ci++){		
+
+		double spatial_prior = getSpatialPrior();
+		double w_spatial_prior = getWeightSpatialPrior();
+
+		//equation (10) (right)
+		double norm_w_spatial_prior = w_spatial_prior / sum_w_spatial_prior;
+		//equation (10) (left)
+		a_Contour_Spatial_prior += norm_w_spatial_prior * spatial_prior;
+	}
+
+	return a_Contour_Spatial_prior;
 }
 
-double getWeightContourSpatialPrior(){
-	return 0;
+double getWeightContourSpatialPrior(const vector<cv::Point> &contours){
+	/*
+	3.2.2 Contour's Spatial Prior and Its Weight
+	*/
+
+	double N = contours.size();
+	double sum_w_spatial_prior = 0;
+
+	for (int i = 0; i < N; i++){
+		sum_w_spatial_prior += getWeightSpatialPrior();
+	}
+
+	//equation (11)
+	double w_Contour_Spatial_prior = sum_w_spatial_prior / N;
+
+	return w_Contour_Spatial_prior;
 }
 
 double getColorLikelihood(cv::Point pos, const cv::Mat& img_gray){
@@ -407,4 +448,12 @@ double getWeightColorLikelihood(cv::Point pos)
 	double w_color_likelihood = 1 - ( (sigma_delta - 1) / L);
 
 	return w_color_likelihood;
+}
+
+double getSpatialPrior(){
+	return 0;
+}
+
+double getWeightSpatialPrior(){
+	return 0;
 }
