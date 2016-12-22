@@ -24,15 +24,14 @@ void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData)
 
 
 //3.2
-double getRegionColorLikelihood(vector< vector<cv::Point> > &contours, int contoursIndex, const cv::Mat& img_gray);
-double getWeightRegionColorLikelihood();
+double getRegionColorLikelihood(const cv::Mat& contourPixels, int ci, const cv::Mat& img_gray);
+double getWeightRegionColorLikelihood(const cv::Mat& contourPixels);
 double getContourSpatialPrior();
 double getWeightContourSpatialPrior();
 
-
 //3.2.1
 double getColorLikelihood(cv::Point pos, const cv::Mat& img_gray);
-double getWeightColorLikelihood();
+double getWeightColorLikelihood(cv::Point pos);
 
 //전역변수들
 //누적 히스토그램
@@ -137,9 +136,21 @@ int main(){
 		//hole의 개수만큼 반복
 		for (int ci = 0; ci < nAreaCount; ci++){
 
+			//ci 번째 contour의 영역을 칠한 뒤,
+			cv::Mat img_contourArea(COLOR_HEIGHT, COLOR_WIDTH, CV_8UC1, cv::Scalar(0));
+			cv::drawContours(img_contourArea, contours, ci, cv::Scalar(255), -1, 8, hierarchy);
+			//findNonZero에서 0이 아닌 부분을 찾아서 contourPixels에 저장
+			//즉, contour(=hole) 영역 안의 pixel 좌표만 따로 저장.
+			//pixels set in the inner region of hole
+			cv::Mat contourPixels;
+			cv::findNonZero(img_contourArea, contourPixels);
+
+
 			//Step : 3.2.1 : Region's Color Likelihood and Its Weight
-			double a_Region_Color_likelihood = getRegionColorLikelihood(contours, ci, img_input_gray);
-			double w_Region_Color_likelihood = getWeightRegionColorLikelihood();
+			double a_Region_Color_likelihood = getRegionColorLikelihood(contourPixels, ci, img_input_gray);
+			double w_Region_Color_likelihood = getWeightRegionColorLikelihood(contourPixels);
+
+			//printf("%f %f\n", a_Region_Color_likelihood, w_Region_Color_likelihood);
 
 			//Step : 3.2.2 : Contour's Spatial Prior and Its Weight
 			double a_Contour_Spatial_prior = getContourSpatialPrior();
@@ -167,9 +178,7 @@ int main(){
 				cv::drawContours(current_segmentation, contours, ci, color, thickness, 8, hierarchy);
 			}
 		}
-		//cv::imshow("Contours", current_segmentation);
-
-
+		//cv::imshow("Contours", current_segmentation);		
 
 		//누적 히스토그램 갱신
 		for (int row = 0; row < COLOR_HEIGHT; row++){
@@ -288,52 +297,74 @@ void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData)
 	}
 }
 
-double getRegionColorLikelihood(vector< vector<cv::Point> > &contours, int ci, const cv::Mat& img_gray){
+double getRegionColorLikelihood(const cv::Mat& contourPixels, int ci, const cv::Mat& img_gray){
 	/*
 	3.2.1 Region's Color Likelihood and Its Weight
 
 	a^rc = region_color_likelihood
-	w^rc = w_region_color_likelihood
 
 	a^cb = color_likelihood
 	w^cb = w_color_likelihood
 	w.^cb = norm_w_color_likelihood
 	*/
+
+	//equation (4) (right)
 	double sum_w_color_likelihood = 0;
-	for (int pi = 0; pi < contours[ci].size(); pi++){
-
-		double w_color_likelihood = getWeightColorLikelihood();
-		//equation (4)
-		sum_w_color_likelihood += w_color_likelihood;
-
+	for (int pi = 0; pi < contourPixels.total(); pi++){
+		sum_w_color_likelihood += getWeightColorLikelihood(contourPixels.at<cv::Point>(pi));
 	}
 
 	double region_color_likelihood = 0;
-	double w_region_color_likelihood = 0;
+	for (int pi = 0; pi <contourPixels.total(); pi++){
 
-	for (int pi = 0; pi < contours[ci].size(); pi++){		
+		double color_likelihood = getColorLikelihood(contourPixels.at<cv::Point>(pi), img_gray);
+		double w_color_likelihood = getWeightColorLikelihood(contourPixels.at<cv::Point>(pi));
 
-		double color_likelihood = getColorLikelihood(contours[ci][pi], img_gray);
-		double w_color_likelihood = getWeightColorLikelihood();
 
-		//equation (4)
+		//equation (4) (right)
 		double norm_w_color_likelihood = w_color_likelihood / sum_w_color_likelihood;
+		//equation (4) (left)		
 		region_color_likelihood += norm_w_color_likelihood * color_likelihood;
 
-		//equation (5)
-		w_region_color_likelihood += w_color_likelihood;
 	}
-	//equation (5)
-	w_region_color_likelihood / contours[ci].size();
+
+		/*
+		for (int pi = 0; pi < contours[ci].size(); pi++){
+
+		double color_likelihood = getColorLikelihood(contours[ci][pi], img_gray);
+		double w_color_likelihood = getWeightColorLikelihood(contourPixels.at<cv::Point>(i));
+
+
+		//equation (4) (right)
+		double norm_w_color_likelihood = w_color_likelihood / sum_w_color_likelihood;
+		//equation (4) (left)
+		region_color_likelihood += norm_w_color_likelihood * color_likelihood;
+
+		}
+		*/
 	
-	return 0;
+	return region_color_likelihood;
 }
 
-double getWeightRegionColorLikelihood(){
+double getWeightRegionColorLikelihood(const cv::Mat& contourPixels){
+	/*
+	3.2.1 Region's Color Likelihood and Its Weight
 
-	//equation (9)
+	w^rc = w_region_color_likelihood
+	w^cb = w_color_likelihood
+	*/
 
-	return 0;
+	//equation (5)	
+	double M = contourPixels.total();
+	double sum_w_color_likelihood = 0;
+	for (int i = 0; i < M; i++){
+		sum_w_color_likelihood += getWeightColorLikelihood(contourPixels.at<cv::Point>(i));
+	}
+
+	double w_region_color_likelihood = sum_w_color_likelihood / M;
+
+
+	return w_region_color_likelihood;
 }
 
 double getContourSpatialPrior(){
@@ -363,7 +394,17 @@ double getColorLikelihood(cv::Point pos, const cv::Mat& img_gray){
 	return a_color_likelihood;
 }
 
-double getWeightColorLikelihood()
+double getWeightColorLikelihood(cv::Point pos)
 {
-	return 0;
+	//equation (9)
+	double sigma_delta = 0;
+
+	for (int i = 0; i < L; i++){
+		if (accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][i] != 0)
+			sigma_delta++;
+	}
+
+	double w_color_likelihood = 1 - ( (sigma_delta - 1) / L);
+
+	return w_color_likelihood;
 }
