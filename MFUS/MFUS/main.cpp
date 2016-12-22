@@ -36,7 +36,7 @@ double getWeightColorLikelihood();
 
 //전역변수들
 //누적 히스토그램
-int** accumulated_histogram;
+double** accumulated_histogram;
 
 
 //논문에서 사용되는 파라미터들
@@ -60,10 +60,13 @@ int main(){
 
 #pragma region init parameters
 		//accumulated background histogram 초기화
-		accumulated_histogram = new int*[COLOR_HEIGHT * COLOR_WIDTH];
+		accumulated_histogram = new double*[COLOR_HEIGHT * COLOR_WIDTH];
 
 		for (int i = 0; i < COLOR_HEIGHT * COLOR_WIDTH; i++){
-			accumulated_histogram[i] = new int[L];
+			accumulated_histogram[i] = new double[L];
+			for (int j = 0; j < L; j++){
+				accumulated_histogram[i][j] = 0;
+			}
 		}
 
 #pragma endregion
@@ -150,7 +153,7 @@ int main(){
 
 			//threshold value(0.5)보다 크면 foreground hole로 인정.
 			//if (p_foreground_hole > kThreshold_hole){
-			if (1){
+			if (0){
 				//내부를 채우기 위해 음수의 thickness를 입력(API 확인)
 				int thickness = -1;
 
@@ -176,28 +179,28 @@ int main(){
 				if (current_segmentation.at<uchar>(row, col) == BACKGROUND){
 
 					cv::Point pos(col, row);
-
-					bool isInBoundary = false;
+										
 					int delta = 0;
-
+					
 					if (initial_segmentation[row * COLOR_WIDTH + col] == BACKGROUND &&	//_z,t = 0
 						isInContour.at<uchar>(row, col) == 0							//is not pixel(z) in boundary
-						) {
-
-						int l = img_input_gray.at<uchar>(pos.y, pos.x) / 8;
-						double a = 1 / (double)(kFrameNumber + 1);
-						
-						//equation (8)
-						double p_l = a * delta;
-						accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][l] = b * (1 - p_l) * accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][l] + (1 - b * (1 - p_l));
+						) {						
+						delta = 1;
 					}
+					else{
+						delta = 0;
+					}
+					int l = img_input_gray.at<uchar>(pos.y, pos.x) / 8;
+					double a = 1 / (double)(kFrameNumber + 1);;
+
+					//equation (8)
+					double p_l = a * delta;
+					accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][l] = b * (1 - p_l) * accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][l] + (1 - b * (1 - p_l));
+					//printf("%f %f\n", p_l, accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][l]);
 				}
 			}
 		}
-
-		//printf("%d %d = %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f\n", 600, 500, accumulated_histogram[500 * COLOR_WIDTH + 600][0], accumulated_histogram[500 * COLOR_WIDTH + 600][1], accumulated_histogram[500 * COLOR_WIDTH + 600][2], accumulated_histogram[500 * COLOR_WIDTH + 600][3], accumulated_histogram[500 * COLOR_WIDTH + 600][4], accumulated_histogram[500 * COLOR_WIDTH + 600][5], accumulated_histogram[500 * COLOR_WIDTH + 600][6], accumulated_histogram[500 * COLOR_WIDTH + 600][7]);
-
-
+	
 #pragma endregion
 
 		//이후 단계 구현	
@@ -327,6 +330,9 @@ double getRegionColorLikelihood(vector< vector<cv::Point> > &contours, int ci, c
 }
 
 double getWeightRegionColorLikelihood(){
+
+	//equation (9)
+
 	return 0;
 }
 
