@@ -24,15 +24,31 @@ void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData)
 
 
 //3.2
-double getRegionColorLikelihood();
+double getRegionColorLikelihood(vector< vector<cv::Point> > &contours, int contoursIndex, const cv::Mat& img_gray);
 double getWeightRegionColorLikelihood();
 double getContourSpatialPrior();
 double getWeightContourSpatialPrior();
 
 
 //3.2.1
-double getColorLikelihood();
+double getColorLikelihood(cv::Point pos, const cv::Mat& img_gray);
 double getWeightColorLikelihood();
+
+//전역변수들
+//누적 히스토그램
+int** accumulated_histogram;
+
+
+//논문에서 사용되는 파라미터들
+
+//equation (6)
+const int L = 32;
+//equation (7)
+const int C = 2;
+//equation (8)
+const double a = 1;
+const double b = 0.95;
+
 
 
 int main(){
@@ -42,6 +58,16 @@ int main(){
 	//srand(time(NULL));
 
 	const int kFrameNumber = 20;
+
+#pragma region init parameters
+	//accumulated background histogram 초기화
+	accumulated_histogram = new int*[COLOR_HEIGHT * COLOR_WIDTH];
+
+	for (int i = 0; i < COLOR_HEIGHT * COLOR_WIDTH; i++){
+		accumulated_histogram[i] = new int[L];
+	}
+
+#pragma endregion
 
 	/*
 	3.1 Problem Formulation
@@ -60,7 +86,6 @@ int main(){
 	delete bodyIndexData;
 #pragma endregion
 
-
 	/*
 	3.2 Foreground Hole Detection
 	*/
@@ -77,7 +102,6 @@ int main(){
 	}
 	//cv::imshow("Initial Segmentation", img_initial_segmentation);
 
-
 	//Initial binary image로부터 모든 contours 구하기
 	//외각선 배열. 즉, 논문에서 요구하는 모든 contours
 	vector<vector<cv::Point>> contours; 
@@ -90,6 +114,11 @@ int main(){
 	int nAreaCount = contours.size();
 	printf("contour의 개수 = %d\n", nAreaCount);	
 
+	//컬러 영상 읽어오기
+	cv::Mat img_input_color = cv::imread(FilePath::getInstance()->getColorPath(kFrameNumber));
+	cv::Mat img_input_gray;
+
+	cv::cvtColor(img_input_color, img_input_gray, CV_RGB2GRAY);
 
 	const double kThreshold_hole = 0.5;
 	
@@ -97,7 +126,7 @@ int main(){
 	for (int ci = 0; ci < nAreaCount; ci++){
 		
 		//Step : 3.2.1 : Region's Color Likelihood and Its Weight
-		double a_Region_Color_likelihood = getRegionColorLikelihood();
+		double a_Region_Color_likelihood = getRegionColorLikelihood(contours, ci, img_input_gray);
 		double w_Region_Color_likelihood = getWeightRegionColorLikelihood();
 
 		//Step : 3.2.2 : Contour's Spatial Prior and Its Weight
@@ -134,6 +163,11 @@ int main(){
 
 	//마무리 단계
 	delete initial_segmentation;
+
+	for (int i = 0; i < COLOR_HEIGHT * COLOR_WIDTH; i++){
+		delete[] accumulated_histogram[i];
+	}
+	delete[] accumulated_histogram;
 
 	cv::waitKey(0);
 
@@ -207,7 +241,7 @@ void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData)
 	}
 }
 
-double getRegionColorLikelihood(){
+double getRegionColorLikelihood(vector< vector<cv::Point> > &contours, int ci, const cv::Mat& img_gray){
 	/*
 	3.2.1 Region's Color Likelihood and Its Weight
 
@@ -218,7 +252,7 @@ double getRegionColorLikelihood(){
 	w^cb = w_color_likelihood
 	w.^cb = norm_w_color_likelihood
 	*/
-	/*
+	
 	double sum_w_color_likelihood = 0;
 	for (int pi = 0; pi < contours[ci].size(); pi++){
 
@@ -231,9 +265,9 @@ double getRegionColorLikelihood(){
 	double region_color_likelihood = 0;
 	double w_region_color_likelihood = 0;
 
-	for (int pi = 0; pi < contours[ci].size(); pi++){
+	for (int pi = 0; pi < contours[ci].size(); pi++){		
 
-		double color_likelihood = getColorLikelihood();
+		double color_likelihood = getColorLikelihood(contours[ci][pi], img_gray);
 		double w_color_likelihood = getWeightColorLikelihood();
 
 		//equation (4)
@@ -245,7 +279,7 @@ double getRegionColorLikelihood(){
 	}
 	//equation (5)
 	w_region_color_likelihood / contours[ci].size();
-	*/
+	
 	return 0;
 }
 
@@ -261,8 +295,23 @@ double getWeightContourSpatialPrior(){
 	return 0;
 }
 
-double getColorLikelihood(){
-	return 0;
+double getColorLikelihood(cv::Point pos, const cv::Mat& img_gray){
+	
+	double a_color_likelihood = 0; 
+
+	//p(V_z,t | y = 0)
+	double p = 0;
+
+	int l = img_gray.at<uchar>(pos.y, pos.x) / 8;
+	for (int index = l - C; index < l + C; index++){
+		//시그마 h^l_z,t
+		p += accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][l];
+	}
+
+	//equation (7)
+	a_color_likelihood = 1 - p;
+
+	return a_color_likelihood;
 }
 
 double getWeightColorLikelihood()
