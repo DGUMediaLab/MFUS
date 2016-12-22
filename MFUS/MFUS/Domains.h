@@ -6,6 +6,9 @@
 #define DEPTH_WIDTH 512
 #define DEPTH_HEIGHT 424
 
+#define BACKGROUND 0
+#define FOREGROUND 1
+
 //전역 상수
 
 

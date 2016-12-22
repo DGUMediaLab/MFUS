@@ -46,7 +46,6 @@ const int L = 32;
 //equation (7)
 const int C = 2;
 //equation (8)
-const double a = 1;
 const double b = 0.95;
 
 
@@ -56,118 +55,163 @@ int main(){
 
 	//난수 생성을 위해
 	//srand(time(NULL));
-
-	const int kFrameNumber = 20;
+	
+	for (int kFrameNumber = 0; kFrameNumber < 100; kFrameNumber++){
 
 #pragma region init parameters
-	//accumulated background histogram 초기화
-	accumulated_histogram = new int*[COLOR_HEIGHT * COLOR_WIDTH];
+		//accumulated background histogram 초기화
+		accumulated_histogram = new int*[COLOR_HEIGHT * COLOR_WIDTH];
 
-	for (int i = 0; i < COLOR_HEIGHT * COLOR_WIDTH; i++){
-		accumulated_histogram[i] = new int[L];
-	}
+		for (int i = 0; i < COLOR_HEIGHT * COLOR_WIDTH; i++){
+			accumulated_histogram[i] = new int[L];
+		}
 
 #pragma endregion
 
-	/*
-	3.1 Problem Formulation
-	current time t = kFrameNumber
-	x = inital_segmentation	
-	*/		
+		/*
+		3.1 Problem Formulation
+		current time t = kFrameNumber
+		x = inital_segmentation
+		*/
 #pragma region Step : 3.1
-	BYTE* bodyIndexData;	
-	loadBodyIndexFile(bodyIndexData, kFrameNumber);
+		BYTE* bodyIndexData;
+		loadBodyIndexFile(bodyIndexData, kFrameNumber);
 
-	//initial segmentation method
-	BYTE* initial_segmentation;
-	initialSegmentationMethod(initial_segmentation, bodyIndexData);
+		//initial segmentation method
+		BYTE* initial_segmentation;
+		initialSegmentationMethod(initial_segmentation, bodyIndexData);
 
-	//각 단계 마다 불 필요한 메모리 삭제
-	delete bodyIndexData;
+		//각 단계 마다 불 필요한 메모리 삭제
+		delete bodyIndexData;
 #pragma endregion
 
-	/*
-	3.2 Foreground Hole Detection
-	*/
+		/*
+		3.2 Foreground Hole Detection
+		*/
 #pragma region Step : 3.2
-	//initial Segmentation 영상 만들기, 검정색이 배경
-	cv::Mat img_initial_segmentation(COLOR_HEIGHT, COLOR_WIDTH, CV_8UC1, cv::Scalar(0));
-	for (int row = 0; row < COLOR_HEIGHT; row++){
-		for (int col = 0; col < COLOR_WIDTH; col++){
 
-			if (initial_segmentation[row * COLOR_WIDTH + col] == 1){
-				img_initial_segmentation.at<uchar>(row, col) = 255;
+		//이번 frame(time t)에서 결과 segmentation의 결과를 담을 mat
+		cv::Mat current_segmentation(COLOR_HEIGHT, COLOR_WIDTH, CV_8UC1, cv::Scalar(BACKGROUND));
+
+		for (int row = 0; row < COLOR_HEIGHT; row++){
+			for (int col = 0; col < COLOR_WIDTH; col++){
+				//초기 결과값을 segmentation 결과값으로 미리 집어넣는다.
+				if (initial_segmentation[row * COLOR_WIDTH + col] == FOREGROUND){
+					current_segmentation.at<uchar>(row, col) = FOREGROUND;
+				}
 			}
 		}
-	}
-	//cv::imshow("Initial Segmentation", img_initial_segmentation);
+		//cv::imshow("Initial Segmentation", img_initial_segmentation);
 
-	//Initial binary image로부터 모든 contours 구하기
-	//외각선 배열. 즉, 논문에서 요구하는 모든 contours
-	vector<vector<cv::Point>> contours; 
-	//외각선들 간의 계층구조
-	vector<cv::Vec4i> hierarchy;		
-	//CV_RETR_TREE = contour 검색 결과를 tree 구조로 저장. 이 때 바깥 쪽에 있을 수록 루트
-	cv::findContours(img_initial_segmentation, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE); 
+		//Initial binary image로부터 모든 contours 구하기
+		//외각선 배열. 즉, 논문에서 요구하는 모든 contours
+		vector<vector<cv::Point>> contours;
+		//외각선들 간의 계층구조
+		vector<cv::Vec4i> hierarchy;
+		//CV_RETR_TREE = contour 검색 결과를 tree 구조로 저장. 이 때 바깥 쪽에 있을 수록 루트
+		cv::findContours(current_segmentation, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
 
 
-	int nAreaCount = contours.size();
-	printf("contour의 개수 = %d\n", nAreaCount);	
+		int nAreaCount = contours.size();
+		printf("contour의 개수 = %d\n", nAreaCount);
 
-	//컬러 영상 읽어오기
-	cv::Mat img_input_color = cv::imread(FilePath::getInstance()->getColorPath(kFrameNumber));
-	cv::Mat img_input_gray;
-
-	cv::cvtColor(img_input_color, img_input_gray, CV_RGB2GRAY);
-
-	const double kThreshold_hole = 0.5;
-	
-	//hole의 개수만큼 반복
-	for (int ci = 0; ci < nAreaCount; ci++){
-		
-		//Step : 3.2.1 : Region's Color Likelihood and Its Weight
-		double a_Region_Color_likelihood = getRegionColorLikelihood(contours, ci, img_input_gray);
-		double w_Region_Color_likelihood = getWeightRegionColorLikelihood();
-
-		//Step : 3.2.2 : Contour's Spatial Prior and Its Weight
-		double a_Contour_Spatial_prior = getContourSpatialPrior();
-		double w_Contour_Spatial_prior = getWeightContourSpatialPrior();
-
-		//equation (2)
-		double w_Dot_R_C = w_Region_Color_likelihood / (w_Region_Color_likelihood + w_Contour_Spatial_prior);
-
-		//equation (2)
-		double p_foreground_hole = w_Dot_R_C * a_Region_Color_likelihood + (1 - w_Dot_R_C) * a_Contour_Spatial_prior;
-
-		//threshold value(0.5)보다 크면 foreground hole로 인정.
-		//if (p_foreground_hole > kThreshold_hole){
-		if (1){						
-			//내부를 채우기 위해 음수의 thickness를 입력(API 확인)
-			int thickness = -1;
-
-			//색상은 흰색으로
-			cv::Scalar color = cv::Scalar(255);
-			//만약 색상을 통해 눈으로 구분하고 싶으면 아래 주석을 이용 img_initial_segmentation 대신 8UC3 Mat 하나 생성해서 대입하면 됨.
-			//cv::Scalar color = cv::Scalar(rand() % 255, rand() % 255, rand() % 255);
-
-			//hole의 내부를 채운다.
-			cv::drawContours(img_initial_segmentation, contours, ci, color, thickness, 8, hierarchy);
+		//픽셀이 Countour에 있는 위치인지 아닌지 빠르게 확인하기 위한 변수
+		cv::Mat isInContour(COLOR_HEIGHT, COLOR_WIDTH, CV_8UC1, cv::Scalar(0));
+		for (int ci = 0; ci < nAreaCount; ci++){
+			for (int pi = 0; pi < contours[ci].size(); pi++){
+				isInContour.at<uchar>(contours[ci][pi].y, contours[ci][pi].x) = 1;
+			}
 		}
-	}
-	cv::imshow("Contours", img_initial_segmentation);
-	
+
+		//컬러 영상 읽어오기
+		cv::Mat img_input_color = cv::imread(FilePath::getInstance()->getColorPath(kFrameNumber));
+		cv::Mat img_input_gray;
+
+		cv::cvtColor(img_input_color, img_input_gray, CV_RGB2GRAY);
+		
+		const double kThreshold_hole = 0.5;
+
+		//hole의 개수만큼 반복
+		for (int ci = 0; ci < nAreaCount; ci++){
+
+			//Step : 3.2.1 : Region's Color Likelihood and Its Weight
+			double a_Region_Color_likelihood = getRegionColorLikelihood(contours, ci, img_input_gray);
+			double w_Region_Color_likelihood = getWeightRegionColorLikelihood();
+
+			//Step : 3.2.2 : Contour's Spatial Prior and Its Weight
+			double a_Contour_Spatial_prior = getContourSpatialPrior();
+			double w_Contour_Spatial_prior = getWeightContourSpatialPrior();
+
+			//equation (2)
+			double w_Dot_R_C = w_Region_Color_likelihood / (w_Region_Color_likelihood + w_Contour_Spatial_prior);
+
+			//equation (2)
+			double p_foreground_hole = w_Dot_R_C * a_Region_Color_likelihood + (1 - w_Dot_R_C) * a_Contour_Spatial_prior;
+
+			//threshold value(0.5)보다 크면 foreground hole로 인정.
+			//if (p_foreground_hole > kThreshold_hole){
+			if (1){
+				//내부를 채우기 위해 음수의 thickness를 입력(API 확인)
+				int thickness = -1;
+
+				//foreground = 1
+				cv::Scalar color = cv::Scalar(FOREGROUND);
+
+				//만약 색상을 통해 눈으로 구분하고 싶으면 아래 주석을 이용 img_initial_segmentation 대신 8UC3 Mat 하나 생성해서 대입하면 됨.
+				//cv::Scalar color = cv::Scalar(rand() % 255, rand() % 255, rand() % 255);
+
+				//hole의 내부를 채운다.
+				cv::drawContours(current_segmentation, contours, ci, color, thickness, 8, hierarchy);
+			}
+		}
+		//cv::imshow("Contours", current_segmentation);
+
+
+
+		//누적 히스토그램 갱신
+		for (int row = 0; row < COLOR_HEIGHT; row++){
+			for (int col = 0; col < COLOR_WIDTH; col++){
+
+				//만약 현재 pixel(z)이 background로 구분되면, 누적 히스토그램을 갱신한다.
+				if (current_segmentation.at<uchar>(row, col) == BACKGROUND){
+
+					cv::Point pos(col, row);
+
+					bool isInBoundary = false;
+					int delta = 0;
+
+					if (initial_segmentation[row * COLOR_WIDTH + col] == BACKGROUND &&	//_z,t = 0
+						isInContour.at<uchar>(row, col) == 0							//is not pixel(z) in boundary
+						) {
+
+						int l = img_input_gray.at<uchar>(pos.y, pos.x) / 8;
+						double a = 1 / (double)(kFrameNumber + 1);
+						
+						//equation (8)
+						double p_l = a * delta;
+						accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][l] = b * (1 - p_l) * accumulated_histogram[pos.y * COLOR_WIDTH + pos.x][l] + (1 - b * (1 - p_l));
+					}
+				}
+			}
+		}
+
+		//printf("%d %d = %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f\n", 600, 500, accumulated_histogram[500 * COLOR_WIDTH + 600][0], accumulated_histogram[500 * COLOR_WIDTH + 600][1], accumulated_histogram[500 * COLOR_WIDTH + 600][2], accumulated_histogram[500 * COLOR_WIDTH + 600][3], accumulated_histogram[500 * COLOR_WIDTH + 600][4], accumulated_histogram[500 * COLOR_WIDTH + 600][5], accumulated_histogram[500 * COLOR_WIDTH + 600][6], accumulated_histogram[500 * COLOR_WIDTH + 600][7]);
+
+
 #pragma endregion
 
-	//이후 단계 구현	
+		//이후 단계 구현	
 
 
-	//마무리 단계
-	delete initial_segmentation;
+		//마무리 단계
+		delete initial_segmentation;
 
-	for (int i = 0; i < COLOR_HEIGHT * COLOR_WIDTH; i++){
-		delete[] accumulated_histogram[i];
+		for (int i = 0; i < COLOR_HEIGHT * COLOR_WIDTH; i++){
+			delete[] accumulated_histogram[i];
+		}
+		delete[] accumulated_histogram;
+
 	}
-	delete[] accumulated_histogram;
 
 	cv::waitKey(0);
 
@@ -252,7 +296,6 @@ double getRegionColorLikelihood(vector< vector<cv::Point> > &contours, int ci, c
 	w^cb = w_color_likelihood
 	w.^cb = norm_w_color_likelihood
 	*/
-	
 	double sum_w_color_likelihood = 0;
 	for (int pi = 0; pi < contours[ci].size(); pi++){
 
