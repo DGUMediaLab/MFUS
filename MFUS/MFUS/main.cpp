@@ -52,6 +52,18 @@ const int C = 2;
 //equation (8)
 const double b = 0.95;
 
+const int L_c = 6;
+const int L_s = 11;
+
+const int L_b = 30;
+const double tow_0 = 0.1;
+const double tow_1 = 0.9;
+
+/*
+const int L_b = 7;
+const double tow_0 = 0.3;
+const double tow_1 = 0.7;
+*/
 
 
 int main(){
