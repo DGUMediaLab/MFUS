@@ -38,6 +38,9 @@ double getSpatialPrior(const cv::Mat& input, const cv::Point pos);
 double getWeightSpatialPrior(const cv::Mat& input, const cv::Point pos);
 double getEdgeClarity(const cv::Mat& input, const cv::Point pos);
 
+//3.3
+void performCoarseRefining(const cv::Mat& img_depth, const cv::Mat& img_gray, BYTE*& initial_segmentation);
+bool getOmegaZero(BYTE*& initial_segmentation, const cv::Point pos);
 
 //전역변수들
 //누적 히스토그램
@@ -63,6 +66,8 @@ const double gamma_B = 0.3;
 const int L_b = 30;
 const double tow_0 = 0.1;
 const double tow_1 = 0.9;
+const double tow_z = 0.5;
+const double w_tow_z = 0.5;
 
 /*
 const int L_b = 7;
@@ -233,8 +238,19 @@ int main(){
 
 #pragma endregion
 
-		//이후 단계 구현	
 
+		/*
+		3.3 Object Boundary Refining
+		*/
+		
+#pragma region Step : 3.3
+
+		//3.3.1
+		//performCoarseRefining(img_input_gray, img_input_gray, initial_segmentation);
+
+#pragma endregion
+
+		//이후 단계 구현	
 
 		//마무리 단계
 		delete initial_segmentation;
@@ -597,4 +613,57 @@ double getEdgeClarity(const cv::Mat& input, const cv::Point pos){
 	
 
 	return edge_clarity;
+}
+
+void performCoarseRefining(const cv::Mat& img_depth, const cv::Mat& img_gray, BYTE*& initial_segmentation){
+	for (int row = 0; row < COLOR_HEIGHT; row++){
+		for (int col = 0; col < COLOR_WIDTH; col++){
+
+			//D = 0
+			if (img_depth.at<uchar>(row, col) == 0){
+				cv::Point pos(col, row);
+				//z (= omega_0
+				if (getOmegaZero(initial_segmentation, pos)){
+
+					double a_color_likelihood = getColorLikelihood(pos, img_gray);
+					double w_color_likelihood = getWeightColorLikelihood(pos);
+
+					if (a_color_likelihood > tow_z && w_color_likelihood > w_tow_z){
+						initial_segmentation[row * COLOR_WIDTH + col] = 1;
+					}
+					else{
+						initial_segmentation = 0;
+					}
+				}
+			}
+		}
+	}
+}
+
+bool getOmegaZero(BYTE*& initial_segmentation, const cv::Point pos){
+	
+	int start_y = pos.y - L_b / 2;
+	int end_y = pos.y + L_b / 2;
+
+	int start_x = pos.x - L_b / 2;
+	int end_x = pos.x + L_b / 2;
+
+	if (start_y < 0) start_y = 0;
+	if (end_y > COLOR_HEIGHT) end_y = COLOR_HEIGHT;
+
+	if (start_x < 0) start_x = 0;
+	if (end_x > COLOR_WIDTH) end_x = COLOR_WIDTH;
+
+	double sum_segmentation = 0;
+	for (int row = start_y; row < end_y; row++){
+		for (int col = start_x; col < end_x; col++){
+			sum_segmentation += initial_segmentation[row * COLOR_WIDTH + col];
+		}
+	}
+	//equation (15) right
+	sum_segmentation /= powf(L_b, 2);
+
+	//equation (15) left
+	if (tow_0 < sum_segmentation < tow_1) return true;
+	else return false;
 }
