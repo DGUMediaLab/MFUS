@@ -56,6 +56,7 @@ const double b = 0.95;
 const int L_c = 6;
 const int L_s = 11;
 
+//FIXME : 정확한 수치를 아직 못찾음
 const double gamma_F = 0.7;
 const double gamma_B = 0.3;
 
@@ -120,11 +121,11 @@ int main(){
 			for (int col = 0; col < COLOR_WIDTH; col++){
 				//초기 결과값을 segmentation 결과값으로 미리 집어넣는다.
 				if (initial_segmentation[row * COLOR_WIDTH + col] == FOREGROUND){
-					current_segmentation.at<uchar>(row, col) = FOREGROUND;
+					current_segmentation.at<uchar>(row, col) = 255;
 				}
 			}
 		}
-		//cv::imshow("Initial Segmentation", img_initial_segmentation);
+		//cv::imshow("Initial Segmentation", current_segmentation);
 
 		//Initial binary image로부터 모든 contours 구하기
 		//외각선 배열. 즉, 논문에서 요구하는 모든 contours
@@ -184,13 +185,12 @@ int main(){
 			double p_foreground_hole = w_Dot_R_C * a_Region_Color_likelihood + (1 - w_Dot_R_C) * a_Contour_Spatial_prior;
 
 			//threshold value(0.5)보다 크면 foreground hole로 인정.
-			//if (p_foreground_hole > kThreshold_hole){
-			if (0){
+			if (p_foreground_hole > kThreshold_hole){		
 				//내부를 채우기 위해 음수의 thickness를 입력(API 확인)
 				int thickness = -1;
 
 				//foreground = 1
-				cv::Scalar color = cv::Scalar(FOREGROUND);
+				cv::Scalar color = cv::Scalar(255);
 
 				//만약 색상을 통해 눈으로 구분하고 싶으면 아래 주석을 이용 img_initial_segmentation 대신 8UC3 Mat 하나 생성해서 대입하면 됨.
 				//cv::Scalar color = cv::Scalar(rand() % 255, rand() % 255, rand() % 255);
@@ -200,7 +200,7 @@ int main(){
 			}
 		}
 		//cv::imshow("Contours", current_segmentation);		
-
+		//cv::waitKey(0);
 		//누적 히스토그램 갱신
 		for (int row = 0; row < COLOR_HEIGHT; row++){
 			for (int col = 0; col < COLOR_WIDTH; col++){
@@ -230,7 +230,7 @@ int main(){
 				}
 			}
 		}
-	
+
 #pragma endregion
 
 		//이후 단계 구현	
