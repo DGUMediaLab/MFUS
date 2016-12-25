@@ -43,7 +43,7 @@ void performCoarseRefining(const cv::Mat& img_depth, const cv::Mat& img_gray, BY
 bool getOmegaZero(BYTE*& initial_segmentation, const cv::Point pos);
 
 //3.3.2
-double getTemporalCue();
+double getTemporalCue(BYTE*& previous_segmentation, cv::Point pos);
 double getWeightTemporalCue();
 double getColorCue();
 double getWeightColorCue();
@@ -90,6 +90,9 @@ int main(){
 	//난수 생성을 위해
 	//srand(time(NULL));
 	
+	bool isInitPrevious_segmentation = false;
+	BYTE* previous_final_segmentation = new BYTE[COLOR_HEIGHT * COLOR_WIDTH];
+
 	for (int kFrameNumber = 0; kFrameNumber < 100; kFrameNumber++){
 
 #pragma region init parameters
@@ -117,6 +120,11 @@ int main(){
 		//initial segmentation method
 		BYTE* initial_segmentation;
 		initialSegmentationMethod(initial_segmentation, bodyIndexData);
+
+		if (isInitPrevious_segmentation == false){
+			isInitPrevious_segmentation = true;
+			memcpy(previous_final_segmentation, initial_segmentation, sizeof(initial_segmentation));
+		}
 
 		//각 단계 마다 불 필요한 메모리 삭제
 		delete bodyIndexData;
@@ -264,8 +272,8 @@ int main(){
 		for (int row = 0; row < COLOR_HEIGHT; row++){
 			for (int col = 0; col < COLOR_WIDTH; col++){
 
-
-				double a_temporal_cue = getTemporalCue();
+				cv::Point pos(col, row);
+				double a_temporal_cue = getTemporalCue(previous_final_segmentation, pos);
 				double a_edge_cue = getEdgeCue();
 				double a_color_cue = getColorCue();			
 				
@@ -311,9 +319,11 @@ int main(){
 			delete[] accumulated_histogram[i];
 		}
 		delete[] accumulated_histogram;
+		delete[] final_segmentation;
 
 	}
 
+	delete[] previous_final_segmentation;
 	cv::waitKey(0);
 
 	return 0;
@@ -720,8 +730,12 @@ bool getOmegaZero(BYTE*& initial_segmentation, const cv::Point pos){
 	else return false;
 }
 
-double getTemporalCue(){
-	return 0;
+double getTemporalCue(BYTE*& previous_segmentation, cv::Point pos){
+
+	//equation (19)
+	double a_temporal_cue = previous_segmentation[pos.y * COLOR_WIDTH + pos.x];
+
+	return a_temporal_cue;
 }
 double getWeightTemporalCue(){
 	return 0;
