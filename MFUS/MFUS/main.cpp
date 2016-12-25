@@ -26,16 +26,17 @@ void initialSegmentationMethod(BYTE*& initial_segmentation, BYTE* bodyIndexData)
 //3.2
 double getRegionColorLikelihood(const cv::Mat& contourPixels, int ci, const cv::Mat& img_gray);
 double getWeightRegionColorLikelihood(const cv::Mat& contourPixels);
-double getContourSpatialPrior(const vector<cv::Point> &contours);
-double getWeightContourSpatialPrior(const vector<cv::Point> &contours);
+double getContourSpatialPrior(const cv::Mat& input, const vector<cv::Point> &contours);
+double getWeightContourSpatialPrior(const cv::Mat& input, const vector<cv::Point> &contours);
 
 //3.2.1
 double getColorLikelihood(cv::Point pos, const cv::Mat& img_gray);
 double getWeightColorLikelihood(cv::Point pos);
 
 //3.2.2
-double getSpatialPrior();
-double getWeightSpatialPrior();
+double getSpatialPrior(const cv::Mat& input, const cv::Point pos);
+double getWeightSpatialPrior(const cv::Mat& input, const cv::Point pos);
+double getEdgeClarity(const cv::Mat& input, const cv::Point pos);
 
 
 //전역변수들
@@ -54,6 +55,9 @@ const double b = 0.95;
 
 const int L_c = 6;
 const int L_s = 11;
+
+const double gamma_F = 0.7;
+const double gamma_B = 0.3;
 
 const int L_b = 30;
 const double tow_0 = 0.1;
@@ -170,8 +174,8 @@ int main(){
 			//printf("%f %f\n", a_Region_Color_likelihood, w_Region_Color_likelihood);
 
 			//Step : 3.2.2 : Contour's Spatial Prior and Its Weight
-			double a_Contour_Spatial_prior = getContourSpatialPrior(contours[ci]);
-			double w_Contour_Spatial_prior = getWeightContourSpatialPrior(contours[ci]);
+			double a_Contour_Spatial_prior = getContourSpatialPrior(img_input_gray, contours[ci]);
+			double w_Contour_Spatial_prior = getWeightContourSpatialPrior(img_input_gray, contours[ci]);
 
 			//equation (2)
 			double w_Dot_R_C = w_Region_Color_likelihood / (w_Region_Color_likelihood + w_Contour_Spatial_prior);
@@ -384,7 +388,7 @@ double getWeightRegionColorLikelihood(const cv::Mat& contourPixels){
 	return w_region_color_likelihood;
 }
 
-double getContourSpatialPrior(const vector<cv::Point> &contours){
+double getContourSpatialPrior(const cv::Mat& input, const vector<cv::Point> &contours){
 	/*
 	3.2.2 Contour's Spatial Prior and Its Weight
 	*/
@@ -392,14 +396,14 @@ double getContourSpatialPrior(const vector<cv::Point> &contours){
 	//equation (10) (right)
 	double sum_w_spatial_prior = 0;
 	for (int ci = 0; ci < contours.size(); ci++){
-		sum_w_spatial_prior += getWeightSpatialPrior();
+		sum_w_spatial_prior += getWeightSpatialPrior(input, contours[ci]);
 	}
 
 	double a_Contour_Spatial_prior = 0;
 	for (int ci = 0; ci < contours.size(); ci++){		
 
-		double spatial_prior = getSpatialPrior();
-		double w_spatial_prior = getWeightSpatialPrior();
+		double spatial_prior = getSpatialPrior(input, contours[ci]);
+		double w_spatial_prior = getWeightSpatialPrior(input, contours[ci]);
 
 		//equation (10) (right)
 		double norm_w_spatial_prior = w_spatial_prior / sum_w_spatial_prior;
@@ -410,7 +414,7 @@ double getContourSpatialPrior(const vector<cv::Point> &contours){
 	return a_Contour_Spatial_prior;
 }
 
-double getWeightContourSpatialPrior(const vector<cv::Point> &contours){
+double getWeightContourSpatialPrior(const cv::Mat& input, const vector<cv::Point> &contours){
 	/*
 	3.2.2 Contour's Spatial Prior and Its Weight
 	*/
@@ -418,8 +422,8 @@ double getWeightContourSpatialPrior(const vector<cv::Point> &contours){
 	double N = contours.size();
 	double sum_w_spatial_prior = 0;
 
-	for (int i = 0; i < N; i++){
-		sum_w_spatial_prior += getWeightSpatialPrior();
+	for (int ci = 0; ci < N; ci++){
+		sum_w_spatial_prior += getWeightSpatialPrior(input, contours[ci]);
 	}
 
 	//equation (11)
@@ -462,10 +466,135 @@ double getWeightColorLikelihood(cv::Point pos)
 	return w_color_likelihood;
 }
 
-double getSpatialPrior(){
-	return 0;
+double getSpatialPrior(const cv::Mat& input, const cv::Point pos){
+
+	double edge_clarity = getEdgeClarity(input, pos);
+
+
+	double spatial_prior = 0;
+
+	//equation (13)
+	if (1 - edge_clarity > gamma_F){
+		spatial_prior = 1;
+	}
+	else if (1 - edge_clarity < gamma_B){
+		spatial_prior = 0;
+	}
+	else{
+		spatial_prior = (1 - edge_clarity - gamma_B) / (gamma_F - gamma_B);
+	}
+
+	//printf("%f\n", spatial_prior);
+	return spatial_prior;
 }
 
-double getWeightSpatialPrior(){
-	return 0;
+double getWeightSpatialPrior(const cv::Mat& input, const cv::Point pos){
+	int *sl = new int[L];
+	for (int i = 0; i < L; i++){
+		sl[i] = 0;
+	}
+
+
+	int start_y = pos.y - L_c / 2;
+	int end_y = pos.y + L_c / 2;
+
+	int start_x = pos.x - L_c / 2;
+	int end_x = pos.x + L_c / 2;
+
+	if (start_y < 0) start_y = 0;
+	if (end_y > COLOR_HEIGHT) end_y = COLOR_HEIGHT;
+
+	if (start_x < 0) start_x = 0;
+	if (end_x > COLOR_WIDTH) end_x = COLOR_WIDTH;
+
+	for (int row = start_y; row < end_y; row++){
+		for (int col = start_x; col < end_x; col++){
+			sl[input.at<uchar>(row, col) / L]++;
+		}
+	}
+
+	double sum = 0;
+	for (int i = 0; i < L; i++){
+		if (sl[i] != 0)
+			sum++;
+	}
+
+	//equation (14)
+	double w_spatial_prior = 1 - (sum - 1) / L;
+
+	//printf("%f\n", w_spatial_prior);
+
+	delete[] sl;
+	return w_spatial_prior;
+}
+
+double getEdgeClarity(const cv::Mat& input, const cv::Point pos){
+
+	double edge_clarity = 0;
+
+	//double *sf = new double[L];
+	//double *sb = new double[L];
+	
+	int *sl = new int[L];
+	for (int i = 0; i < L; i++){
+		sl[i] = 0;
+	}
+
+
+	int start_y = pos.y - L_c / 2;
+	int end_y = pos.y + L_c / 2;
+
+	int start_x = pos.x - L_c / 2;
+	int end_x = pos.x + L_c / 2;
+
+	if (start_y < 0) start_y = 0;
+	if (end_y > COLOR_HEIGHT) end_y = COLOR_HEIGHT;
+
+	if (start_x < 0) start_x = 0;
+	if (end_x > COLOR_WIDTH) end_x = COLOR_WIDTH;
+
+	for (int row = start_y; row < end_y; row++){
+		for (int col = start_x; col < end_x; col++){
+			sl[input.at<uchar>(row, col) / L]++;
+		}
+	}
+
+	
+
+
+	int count = 0;
+	int first = 0;
+	int second = 0;
+
+	for (int i = 0; i < L; i++){
+		if (count < sl[i]){
+			second = first;
+			first = i;
+			count = sl[i];
+		}
+	}
+
+	
+
+	int N_z = 0;
+
+	for (int i = 0; i < L; i++){
+		if (i != first && i != second){
+			N_z += sl[i];
+		}
+	}
+
+
+	edge_clarity = 1 - ((double)N_z / pow(L_c, 2));
+	
+	//printf("%f\n", edge_clarity);
+
+	delete[] sl;
+
+
+	//delete[] sf;
+	//delete[] sb;
+	
+
+	return edge_clarity;
 }
