@@ -42,6 +42,14 @@ double getEdgeClarity(const cv::Mat& input, const cv::Point pos);
 void performCoarseRefining(const cv::Mat& img_depth, const cv::Mat& img_gray, BYTE*& initial_segmentation);
 bool getOmegaZero(BYTE*& initial_segmentation, const cv::Point pos);
 
+//3.3.2
+double getTemporalCue();
+double getWeightTemporalCue();
+double getColorCue();
+double getWeightColorCue();
+double getEdgeCue();
+double getWeightEdgeCue();
+
 //전역변수들
 //누적 히스토그램
 double** accumulated_histogram;
@@ -247,6 +255,50 @@ int main(){
 
 		//3.3.1
 		//performCoarseRefining(img_input_gray, img_input_gray, initial_segmentation);
+
+
+		BYTE* final_segmentation = new BYTE[COLOR_HEIGHT * COLOR_WIDTH];
+		memcpy(final_segmentation, initial_segmentation, sizeof(initial_segmentation));
+
+		//3.3.2
+		for (int row = 0; row < COLOR_HEIGHT; row++){
+			for (int col = 0; col < COLOR_WIDTH; col++){
+
+
+				double a_temporal_cue = getTemporalCue();
+				double a_edge_cue = getEdgeCue();
+				double a_color_cue = getColorCue();			
+				
+				double w_edge_cue = getWeightEdgeCue();
+				double w_temporal_cue = getWeightTemporalCue();
+				double w_color_cue = getWeightColorCue();
+								
+
+				//equation (17) 3 left
+				double norm_w_temparal = w_temporal_cue / (w_temporal_cue + w_color_cue);
+
+				//equation (17) 2 left
+				double a_temporal_color_cue = norm_w_temparal * a_temporal_cue + (1 - norm_w_temparal) * a_color_cue;
+
+				//equation (17) 3 right
+				double w_temporal_color = w_temporal_cue > w_color_cue ? w_temporal_cue : w_color_cue;
+
+				//equation (17) 2 right
+				double norm_w_temporal_color = w_temporal_color / (w_temporal_color + w_edge_cue);
+
+				//equation (17) 1
+				double a_final_probability = norm_w_temporal_color * a_temporal_color_cue + (1 - norm_w_temporal_color) * a_edge_cue;
+
+
+				//equation (18)
+				if (a_final_probability > tow_z){
+					final_segmentation[row * COLOR_WIDTH + col] = 1;
+				}
+				else
+					final_segmentation[row * COLOR_WIDTH + col] = 0;
+			}
+		}
+
 
 #pragma endregion
 
@@ -666,4 +718,23 @@ bool getOmegaZero(BYTE*& initial_segmentation, const cv::Point pos){
 	//equation (15) left
 	if (tow_0 < sum_segmentation < tow_1) return true;
 	else return false;
+}
+
+double getTemporalCue(){
+	return 0;
+}
+double getWeightTemporalCue(){
+	return 0;
+}
+double getColorCue(){
+	return 0;
+}
+double getWeightColorCue(){
+	return 0;
+}
+double getEdgeCue(){
+	return 0;
+}
+double getWeightEdgeCue(){
+	return 0;
 }
