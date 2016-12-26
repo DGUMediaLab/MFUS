@@ -77,6 +77,8 @@ const double tow_1 = 0.9;
 const double tow_z = 0.5;
 const double w_tow_z = 0.5;
 
+const double sigma = 0.8;
+
 /*
 const int L_b = 7;
 const double tow_0 = 0.3;
